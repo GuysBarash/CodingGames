@@ -4,6 +4,7 @@ from datetime import datetime
 import numpy as np
 import pickle as p
 from copy import copy
+from collections import deque
 
 DEBUG_MODE = True
 LOCAL_MODE = True
@@ -238,6 +239,9 @@ class SimpleAgent:
     def __init__(self, player=0):
         self.player = player
 
+    def set_player(self, player):
+        self.player = player
+
     def observe(self, state):
         actions = state.get_actions(state.player)
         action = actions[0]
@@ -265,36 +269,136 @@ class SimpleAgent:
         return action
 
 
+class FloodLookAheadAgent:
+    def __init__(self, player=0):
+        self.player = player
+
+    def set_player(self, player):
+        self.player = player
+
+    def observe(self, state):
+        self.set_player(state.player)
+        current_player = state.player
+        other_players = [t for t in range(state.player_count) if t != current_player]
+
+        actions = state.get_actions(self.player)
+        actions_utils = dict()
+        for action in actions:
+            nstate = state.apply_action(action)
+            utility = self.get_utility(nstate)
+            move_util = utility[current_player] - utility[other_players[0]]
+            actions_utils[action] = move_util
+
+        max_util = max(actions_utils.values())
+        for taction in actions:
+            if actions_utils[taction] == max_util:
+                action = taction
+                break
+
+        if DEBUG_MODE:
+            s = ''
+            s += '\n'
+            for i in range(state.heads.shape[0]):
+                s += f'[P{i+1}][X {state.heads[i,0]}][[Y {state.heads[i,1]}]\n'
+
+            s += '\n'
+            s += f'Player: {state.player}' + '\n'
+            s += f'Legal actions: {actions}' + '\n'
+            for t_action in actions:
+                old_pos = state.heads[state.player]
+                new_pos = action_to_xy(old_pos, t_action)
+                chosen = ''
+                if t_action == action:
+                    chosen = '<><>'
+                s += f'POS: {old_pos}-->{t_action} --> {new_pos} V[{actions_utils[t_action]:>6}] {chosen}' + '\n'
+            dprint(s)
+
+        return action
+
+    def get_utility(self, state):
+        players = [(self.player + i) % state.player_count for i in range(state.player_count)]
+
+        xmap = state.arr.copy()
+        xmap.dtype = int
+        xmap[xmap != 0] = -2
+
+        frontiers = dict()
+        utility = [0] * state.player_count
+        for player in players:
+            position = state.heads[player].tolist()
+            player_sign = player + 1
+            xmap[position[0], position[1]] = player_sign
+            q = deque()
+            q.append(position)
+            frontiers[player] = q
+            utility[player] += 1
+
+        while len(frontiers) > 0:
+            for player in players:
+                player_sign = player + 1
+                new_frontire = deque()
+                frontier = frontiers.pop(player, None)
+                if frontier is not None:
+                    for pos in frontier:
+                        for action in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+                            qx, qy = action_to_xy(pos, action)
+                            hit_wall = (qx < 0) or (qx >= State.GREED_X) or (qy < 0) or (
+                                    qy >= State.GREED_Y)
+                            if not hit_wall:
+                                if xmap[qx, qy] == 0:
+                                    xmap[qx, qy] = player_sign
+                                    utility[player] += 1
+                                    new_frontire.append([qx, qy])
+                    if len(new_frontire) > 0:
+                        frontiers[player] = new_frontire
+        return utility
+
+
 world = World()
 d = None
-agent = SimpleAgent()
+agent = FloodLookAheadAgent()
 while True:
     if LOCAL_MODE:
         d = dict()
-        d["turn"] = 14
+        d["turn"] = 20
         d["player_count"] = 2
-        d["player"] = 1
-        d["player_sig"] = 2
-        d["terminal"] = True
-        d["p0_START_X"] = 10
-        d["p0_START_Y"] = 18
-        d["p0_CURR_X"] = 10
+        d["player"] = 0
+        d["player_sig"] = 1
+        d["terminal"] = False
+        d["p0_START_X"] = 8
+        d["p0_START_Y"] = 1
+        d["p0_CURR_X"] = 7
         d["p0_CURR_Y"] = 17
-        d["p1_START_X"] = 11
-        d["p1_START_Y"] = 11
-        d["p1_CURR_X"] = 0
-        d["p1_CURR_Y"] = 10
-        d["arr_000"] = "NO"
-        d["arr_001"] = "ARRAY"
-        d["arr_002"] = "HASH"
+        d["p1_START_X"] = 20
+        d["p1_START_Y"] = 18
+        d["p1_CURR_X"] = 1
+        d["p1_CURR_Y"] = 18
+        d["arr_000"] = "000000011000000000000000000000"
+        d["arr_001"] = "000000011000000000000000000000"
+        d["arr_002"] = "000000010000000000000000000000"
+        d["arr_003"] = "000000010000000000000000000000"
+        d["arr_004"] = "000000010000000000000000000000"
+        d["arr_005"] = "000000010000000000000000000000"
+        d["arr_006"] = "000000010000000000000000000000"
+        d["arr_007"] = "000000010000000000000000000000"
+        d["arr_008"] = "000000010000000000000000000000"
+        d["arr_009"] = "000000010000000000000000000000"
+        d["arr_010"] = "000000010000000000000000000000"
+        d["arr_011"] = "000000010000000000000000000000"
+        d["arr_012"] = "000000010000000000000000000000"
+        d["arr_013"] = "000000010000000000000000000000"
+        d["arr_014"] = "000000010000000000000000000000"
+        d["arr_015"] = "000000010000000000000000000000"
+        d["arr_016"] = "000000010000000000000000000000"
+        d["arr_017"] = "000000010000000000000000000000"
+        d["arr_018"] = "022222222222222222222000000000"
+        d["arr_019"] = "000000000000000000000000000000"
         d["DONE"] = "V"
 
     state = world.update(d=d)
     world.display()
-    action = agent.observe(state)
 
-    nstate = state.apply_action("LEFT")
-    print_dict(nstate.to_dict())
+    action = agent.observe(state)
 
     # A single line with UP, DOWN, LEFT or RIGHT
     print(action)

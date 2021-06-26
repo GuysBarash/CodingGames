@@ -1,9 +1,24 @@
 import sys
 import math
+import numpy as np
+
+DEBUG_MODE = True
+LOCAL_MODE = True
 
 
 def dprint(s=''):
     print(s, file=sys.stderr)
+
+
+def print_dict(d):
+    dprint('d = dict()')
+    for k in d.keys():
+        v = d[k]
+        if type(v) == str:
+            dprint(f'd["{k}"] = "{v}"')
+        else:
+            dprint(f'd["{k}"] = {v}')
+    dprint("")
 
 
 class Ground:
@@ -42,6 +57,9 @@ class Ground:
 
     def get_landing_strip(self):
         return f'{self.landing_x[0]}x{self.landing_y} <--> {self.landing_x[1]}x{self.landing_y}'
+
+    def get_strip_size(self):
+        return int(np.abs(self.landing_x[0] - self.landing_x[1]))
 
     def get_landing(self, symbol='XY'):
         landing_x = sum(self.landing_x) / len(self.landing_x)
@@ -87,7 +105,7 @@ class Craft:
         self.landing_speed_y = 40
         self.gravity = ground.gravity
 
-    def update(self, inp=None):
+    def update(self, d=None):
         # h_speed: the horizontal speed (in m/s), can be negative.
         # v_speed: the vertical speed (in m/s), can be negative.
         # fuel: the quantity of remaining fuel in liters.
@@ -95,15 +113,37 @@ class Craft:
         # power: the thrust power (0 to 4).
 
         self.turn += 1
-        if inp is None:
-            self.inp = [int(i) for i in input().split()]
+        if d is None:
+            self.x, self.y, x_speed, y_speed, self.fuel, self.rotate, self.power = [int(i) for i in input().split()]
+            self.x_acc = x_speed - self.x_speed
+            self.y_acc = y_speed - self.y_speed
+            self.x_speed = x_speed
+            self.y_speed = y_speed
         else:
-            self.inp = inp
-        self.x, self.y, x_speed, y_speed, self.fuel, self.rotate, self.power = self.inp
-        self.x_acc = x_speed - self.x_speed
-        self.y_acc = y_speed - self.y_speed
-        self.x_speed = x_speed
-        self.y_speed = y_speed
+            self.x = d["x"]
+            self.y = d["y"]
+            self.x_speed = d["x_speed"]
+            self.y_speed = d["y_speed"]
+            self.fuel = d["fuel"]
+            self.rotate = d["rotate"]
+            self.power = d["power"]
+            self.x_acc = d['x_acc']
+            self.y_acc = d['y_acc']
+
+        gx, gy = self.ground.get_landing()
+        self.distance_x = gx - self.x
+        self.distance_y = self.y - gy
+
+    def act(self):
+        single_x_unit = self.ground.get_strip_size() / 2
+        x_units_from_target = np.abs(self.distance_x) / single_x_unit
+        x_units_from_target = min(4, x_units_from_target) / 4.0
+        ntilt = 45 / x_units_from_target
+        ntilt_dir = np.sign(- self.distance_x)
+        tilt = int(ntilt_dir * ntilt)
+
+        npower = self.calc_y_speed()
+        return f"{tilt} {npower}"
 
     def get_params(self):
         d = dict()
@@ -111,13 +151,8 @@ class Craft:
         d['x_speed'], d['y_speed'] = self.x_speed, self.y_speed
         d['x_acc'], d['y_acc'] = self.x_acc, self.y_acc
         d['fuel'], d['rotate'], d['power'] = self.fuel, self.rotate, self.power
-        return d
-
-    def get_target(self):
-        d = dict()
-        d['x'], d['y'] = ground.get_landing()
-        d['x_speed'], d['y_speed'] = int(self.landing_speed_x / 2.0), int(self.landing_speed_y / 2.0)
-        d['rotate'] = 0
+        d['distance_x'] = self.distance_x
+        d['distance_y'] = self.distance_y
         return d
 
     def get_statues(self):
@@ -132,28 +167,59 @@ class Craft:
 
         return msg
 
-    def build_course(self):
-        curr = self.get_params()
-        trgt = self.get_target()
+    def calc_y_speed(self):
 
-        x_dist = curr['x'] - trgt['x']
-        y_dist = curr['y'] - trgt['y']
+        max_y = 2600
+        min_y = 0
 
-        # TODO
-        return "90 00"
+        max_speed = -40
+        min_speed = -10
 
+        std_unit = 0.1
+        min_std_unit = 2
+
+        relative_y = (self.distance_y - min_y) / (max_y - min_y)
+        expected_relative_speed = (max_speed - min_speed) * relative_y
+        optimal_speed = min_speed + expected_relative_speed
+        speed_std = min(optimal_speed * std_unit, min_std_unit)
+
+        speed_delta = (self.y_speed - optimal_speed) / speed_std
+        dprint(f"Optimal speed: {optimal_speed:>.1f}\t Current: {self.y_speed:>.1f}")
+        dprint(f"Speed difference from optimal: {speed_delta:>.1f}")
+        desired_thrust = min(4, max(1, int(np.floor(speed_delta))))
+        return desired_thrust
+
+
+d = None
+if LOCAL_MODE:
+    d = [(0, 100), (1000, 500), (1500, 1500), (3000, 1000), (4000, 150), (5500, 150), (6999, 800)]
 
 ground = Ground()
-ground.update([(0, 100), (1000, 500), (1500, 100), (3000, 100), (5000, 1500), (6999, 1000)])
+ground.update(d)
 craft = Craft(ground)
 dprint(ground.get_map())
 
 # game loop
 while True:
-    craft.update([2500, 2500, 0, 0, 500, 0, 0])
-    dprint(craft.get_statues())
-    command = craft.build_course()
+    d = None
+    if LOCAL_MODE:
+        d = dict()
+        d["x"] = 2789
+        d["y"] = 1552
+        d["x_speed"] = 23
+        d["y_speed"] = -87
+        d["x_acc"] = 1
+        d["y_acc"] = -4
+        d["fuel"] = 523
+        d["rotate"] = -68
+        d["power"] = 1
+
+    craft.update(d)
+    print_dict(craft.get_params())
+    command = craft.act()
     dprint(f"[{craft.turn}] Command:\t{command}")
     print(command)
 
-    # rotate power. rotate is the desired rotation angle. power is the desired thrust power.
+    if LOCAL_MODE:
+        print("LOCAL MODE. BREAK.")
+        break

@@ -176,7 +176,7 @@ class World:
         self.zombies['Interception position_X'] = self.zombies['Xdest']
         self.zombies['Interception position_X'] = self.zombies['Ydest']
 
-        # Znext = self.zombies[['Xdest', 'Ydest']].values
+        # Znext = self.zombies[['Xdest', 'Ydest']].magic_values
         # ZV = velocity(Z, Znext)
         #
         # time_horizon = 30
