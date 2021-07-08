@@ -301,7 +301,9 @@ class OptimizedBFSAagent:
 
         # Retry mechanism
         self.bfs_attempts = 0
-        self.bfs_time_cap = 9.15
+        self.bfs_time_cap = 0.16
+        if LOCAL_MODE:
+            self.bfs_time_cap = 9999999
         self.bfs_cap = 500000
 
         self.duplicates = dict()
@@ -327,7 +329,7 @@ class OptimizedBFSAagent:
             self.max_row = map.shape[0] - 1
             self.winner_r_c = winner_r_c
             self.distance_to_target = np.abs(winner_r_c[0] - self.row) + np.abs(winner_r_c[1] - self.col)
-            self.priority = - 4 * np.abs(winner_r_c[0] - self.row) - 1 * self.rounds
+            self.priority = - self.steps  # - int(10 * np.abs(winner_r_c[0] - self.row) / self.max_row)
 
             self.last_action = last_action
             self.last_node_sig = None
@@ -342,8 +344,9 @@ class OptimizedBFSAagent:
             self.block_per_floor = block_per_floor
 
             # self.sig = f'ROW{self.row}_COL{self.col}_DIR{self.direction}_ELV{self.elevators}_CLNS{self.clones}'
-            self.sig = f'ROW{self.row}_COL{self.col}_DIR{self.direction}_ELV{self.elevators}_RND{self.rounds}'
-            self.p_sig = (-self.priority, self.sig)
+            # self.sig = f'ROW{self.row}_COL{self.col}_DIR{self.direction}_ELV{self.elevators}_RND{self.rounds}'
+            self.sig = self.make_sig()
+            self.p_sig = (-self.priority, (self.sig, self))
             self.diaplay = None
 
         def check_terminal(self):
@@ -436,8 +439,16 @@ class OptimizedBFSAagent:
             else:
                 raise Exception(f"BAD ACTION! {action}")
 
+        def make_sig(self):
+            s = f'ROW{self.row}_COL{self.col}_DIR{self.direction}_ELV{self.elevators}'
+            return s
+
         def __str__(self):
             return self.sig
+
+        def __gt__(self, other):
+            return self.priority > other.priority
+    # return comparison
 
     def run_bfs(self):
         if self.bfs_attempts == 0:
@@ -447,13 +458,11 @@ class OptimizedBFSAagent:
                                                 self.map, self.winner_r_c)
             self.pq = PriorityQueue()
             self.nodes = dict()
-            self.visited = list()
+            self.visited = dict()
             self.pq.put(self.root.p_sig)
             self.nodes[self.root.sig] = self.root
 
         s_time = datetime.now()
-        # while len(self.q) > 0 and self.winner_node is None:
-        # node_sig = self.q.popleft()
         bfs_rounds = 0
         self.bfs_attempts += 1
         while not self.pq.empty() and self.winner_node is None and bfs_rounds < self.bfs_cap:
@@ -461,48 +470,40 @@ class OptimizedBFSAagent:
             if c_runtime > self.bfs_time_cap:
                 break
             bfs_rounds += 1
-            priority, node_sig = self.pq.get()
-            node = self.nodes.get(node_sig)
-
-            self.visited.append(node_sig)
-            actions = node.get_actions()
-            sqig = f'R{node.row}C{node.col}D{node.direction}'
-            self.duplicates[sqig] = self.duplicates.get(sqig, 0) + 1
-            for action in actions:
-                t_node = node.apply(action)
-                self.nodes_generated += 1
-
-                if t_node.terminal:
-                    if t_node.winner:
-                        # Got a win!
-                        runtime = datetime.now() - s_time
-                        dprint(f"Got a solution! ")
-                        dprint(f'[Nodes: {self.nodes_generated}]')
-                        dprint(f'[duration: {runtime}]')
-                        dprint(f'[Nodes per 100ms: {self.nodes_generated / (10 * runtime.total_seconds())}')
-                        self.winner_node = t_node
-                        return True
-                    else:
-                        pass
+            priority, (node_sig, node) = self.pq.get()
+            if node.terminal:
+                if node.winner:
+                    # Got a win!
+                    runtime = datetime.now() - s_time
+                    dprint(f"Got a solution! ")
+                    dprint(f'[Nodes: {self.nodes_generated}]')
+                    dprint(f'[duration: {runtime}]')
+                    dprint(f'[Nodes per 100ms: {self.nodes_generated / (10 * runtime.total_seconds())}')
+                    self.winner_node = node
+                    return True
                 else:
-                    if t_node.sig in self.visited:
-                        compare_a = self.nodes[t_node.sig]
-                        if t_node.rounds > compare_a.rounds:
-                            self.nodes[t_node.sig] = t_node
-                            dprint("Better path!")
+                    pass
+            else:
+                if node_sig in self.visited:
+                    compare_a = self.nodes[node.sig]
+                    if node.steps < compare_a.steps:
+                        self.nodes[node_sig] = node
+                        dprint("Better path!")
 
-                    else:
-                        # Keep exploring
-                        # self.q.append(t_node.sig)
+                else:
+                    # Keep exploring
+                    self.visited[node_sig] = True
+                    self.nodes[node_sig] = node
+                    actions = node.get_actions()
+                    for action in actions:
+                        t_node = node.apply(action)
+                        self.nodes_generated += 1
                         self.pq.put(t_node.p_sig)
-                        self.nodes[t_node.sig] = t_node
-                        self.visited.append(t_node.sig)
 
         runtime = datetime.now() - s_time
         dprint(f"[Nodes: {self.nodes_generated}]Oh no. No solution found.. ")
         dprint(f'[duration: {runtime}]')
         dprint(f'[Nodes per 100ms: {self.nodes_generated / (10 * runtime.total_seconds())}')
-        print(f"MAX COL: {self.off_course}")
         return False
 
     def build_plan(self):
@@ -529,7 +530,7 @@ class OptimizedBFSAagent:
         dprint("Plan completed.")
         dprint(self.winner_path_s)
         cround = self.root.rounds - self.winner_node.rounds + 1
-        dprint(f'[ROUND {cround:>3}] WIN!')
+        dprint(f'[ROUND {cround:>3}] WIN! Sig: <{self.winner_node.sig}>')
         return True
 
     def run_on_path(self, state):
@@ -590,22 +591,22 @@ d = None
 if LOCAL_MODE:
     d = dict()
     d["turn"] = 1
-    d["nb_floors"] = 13
-    d["width"] = 69
-    d["nb_rounds"] = 79
-    d["exit_floor"] = 11
-    d["exit_pos"] = 39
-    d["nb_total_clones"] = 8
-    d["nb_additional_elevators"] = 5
-    d["nb_elevators"] = 30
-    d["elevators_map"] = {6: [65, 13, 34, 57], 11: [4, 13, 42, 11, 38], 8: [34, 56, 1, 66, 9, 23], 7: [17],
-                          2: [24, 23, 3, 58], 10: [23, 3], 5: [4, 46], 1: [50, 17, 4, 24, 34], 3: [17]}
+    d["nb_floors"] = 10
+    d["width"] = 19
+    d["nb_rounds"] = 47
+    d["exit_floor"] = 9
+    d["exit_pos"] = 9
+    d["nb_total_clones"] = 41
+    d["nb_additional_elevators"] = 0
+    d["nb_elevators"] = 17
+    d["elevators_map"] = {3: [4, 17], 4: [3, 9], 7: [4, 17], 1: [17, 4], 8: [9], 2: [3, 9], 0: [3, 9], 5: [4, 17],
+                          6: [9, 3]}
     d["initial_floor"] = 0
-    d["initial_pos"] = 33
-    d["elevator_ramining"] = 5
-    d["clones_remaining"] = 8
+    d["initial_pos"] = 6
+    d["elevator_ramining"] = 0
+    d["clones_remaining"] = 41
     d["clone_floor"] = 0
-    d["clone_pos"] = 33
+    d["clone_pos"] = 6
     d["direction"] = "RIGHT"
     d["terminal"] = True
     d["winner"] = False

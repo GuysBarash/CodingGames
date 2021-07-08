@@ -30,5 +30,10 @@ def print_dict(d):
     dprint("")
 
 
+def dprint_array(arr):
+    for ridx in range(arr.shape[0]):
+        dprint(''.join(arr[ridx]))
+
+
 if __name__ == '__main__':
     j = 3
