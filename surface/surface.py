@@ -8,6 +8,7 @@ import pandas as pd
 import pickle as p
 from copy import copy
 from queue import Queue
+from collections import deque
 from datetime import datetime
 import time
 import itertools
@@ -54,7 +55,7 @@ class World:
         self.coordinates_count = None
         self.coordinates = None
 
-        self.lakes = None
+        self.lakes = dict()
         self.lakes_count = 0
 
         self.results = list()
@@ -89,97 +90,90 @@ class World:
         d['coordinates'] = self.coordinates
         return d
 
-    def pre_calc(self):
-        l1 = range(self.width)
-        l2 = range(self.height)
-        l = [cor_2_str(*t) for t in list(itertools.product(l1, l2))]
-        self.lakes = pd.DataFrame(index=l, columns=[-1], data=0)
-        self.lakes_count = 0
-        self.map = pd.DataFrame(columns=l1, index=l2,
-                                data=[list(t) for t in self.map_raw]
-                                )
+    def floodfil(self, x, y, lake=3):
+        mask = np.zeros((self.height + 2, self.width + 2), np.uint8)
+        surface_size, qarr1, _, _ = cv2.floodFill(self.map, mask, seedPoint=(x, y), newVal=lake)
+        if type(qarr1) == np.ndarray:
+            self.map = qarr1
+        else:
+            self.map = qarr1.get()
+        self.lakes[lake] = surface_size
 
-    def valid_coors(self, x, y):
-        if 0 <= x < self.width:
-            if 0 <= y < self.height:
-                return True
-        return False
+    def floodfil_1(self, x, y, lake):
+
+        if self.get_tile(x, y) == -1:
+            self.map[y, x] = lake
+            if x > 0:
+                self.floodfil_1(x - 1, y, lake)
+            if x < self.width - 1:
+                self.floodfil_1(x + 1, y, lake)
+            if y > 0:
+                self.floodfil_1(x, y - 1, lake)
+            if y < self.height - 1:
+                self.floodfil_1(x, y + 1, lake)
+
+    def floodfil_2(self, x, y, lake):
+        q = deque([(x, y)])
+        while q:
+            x, y = q.pop()
+            if self.get_tile(x, y) == -1:
+                self.map[y, x] = lake
+                if x > 0:
+                    q.append((x - 1, y))
+                if x < self.width - 1:
+                    q.append((x + 1, y))
+                if y > 0:
+                    q.append((x, y - 1))
+                if y < self.height - 1:
+                    q.append((x, y + 1))
 
     def run_coordinate(self, x, y):
         current_lake = self.lakes_count
+        self.floodfil_2(x, y, current_lake)
+        self.lakes[current_lake] = np.sum(self.map == current_lake)
         self.lakes_count += 1
-        self.lakes[current_lake] = 0
-        q = Queue()
-        visited = dict()
-        q.put((x, y, cor_2_str(x, y)))
-        while not q.empty():
-            tx, ty, t_sig = q.get()
-            self.lakes.loc[t_sig, current_lake] = 1
 
-            # Up
-            if ty > 0:
-                ny = ty - 1
-                nx = tx
-                nsig = cor_2_str(nx, ny)
-                tile = self.map.loc[ny, nx]
-                if tile == 'O' and not visited.get(nsig, False):
-                    q.put((nx, ny, nsig))
-                    visited[nsig] = True
-            # Down
-            if ty < (self.height - 1):
-                ny = ty + 1
-                nx = tx
-                nsig = cor_2_str(nx, ny)
-                tile = self.map.loc[ny, nx]
-                if tile == 'O' and not visited.get(nsig, False):
-                    q.put((nx, ny, nsig))
-                    visited[nsig] = True
-            # Left
-            if tx > 0:
-                ny = ty
-                nx = tx - 1
-                nsig = cor_2_str(nx, ny)
-                tile = self.map.loc[ny, nx]
-                if tile == 'O' and not visited.get(nsig, False):
-                    q.put((nx, ny, nsig))
-                    visited[nsig] = True
-            # Down
-            if tx < (self.width - 1):
-                ny = ty
-                nx = tx + 1
-                nsig = cor_2_str(nx, ny)
-                tile = self.map.loc[ny, nx]
-                if tile == 'O' and not visited.get(nsig, False):
-                    q.put((nx, ny, nsig))
-                    visited[nsig] = True
+    def view_map(self):
+        l1 = range(self.width)
+        l2 = range(self.height)
+        self.map = pd.DataFrame(columns=l1, index=l2,
+                                data=[list(t) for t in self.map_raw]
+                                ).to_numpy()
+        self.map[np.where(self.map == '#')] = -5
+        self.map[np.where(self.map == 'O')] = -1
+        self.map = np.array(self.map, dtype=np.int32)
 
-        return True
+    def precalc(self):
+        l1 = range(self.width)
+        l2 = range(self.height)
+        l = [cor_2_str(*t) for t in list(itertools.product(l1, l2))]
+        self.view_map()
+        self.lakes_count = 0
+
+    def get_tile(self, x, y):
+        tile = self.map[y, x]
+        return tile
 
     def run(self):
-        self.pre_calc()
+        self.precalc()
 
         for idx, (cx, cy) in enumerate(self.coordinates):
-            tile = self.map.loc[cy, cx]
-            if tile == '#':
+            tile = self.get_tile(cx, cy)
+            if tile == -5:
                 dprint(f'Coor [{idx+1:>3}/{self.coordinates_count}][{cx}x{cy}] --> NOT LAKE')
                 # self.results.append(0)
                 print(0)
             else:
-                sig = cor_2_str(cx, cy)
-                if any(self.lakes.loc[sig] > 0):
-                    # This coordinate is in a known lake
-                    dprint("Answer is known")
-                else:
-                    # New lake!
-                    dprint("Running calculation")
+                if tile == -1:
+                    # New tile!
+                    dprint(
+                        f'Coor [{idx+1:>3}/{self.coordinates_count}][{cx}x{cy}] --> Running Lake {self.lakes_count}!.')
                     self.run_coordinate(cx, cy)
-
-                # Calculate length
-                lake = self.lakes.columns[self.lakes.loc[sig] > 0][0]
-                lake_size = self.lakes[lake].sum()
-                dprint(f'Coor [{idx+1:>3}/{self.coordinates_count}][{cx}x{cy}] --> Lake {lake} Size: {lake_size}')
-                # self.results.append(lake_size)
-                print(lake_size)
+                else:
+                    dprint(f'Coor [{idx+1:>3}/{self.coordinates_count}][{cx}x{cy}] --> known. Lake {tile}')
+                tile = self.get_tile(cx, cy)
+                surface = self.lakes.get(tile)
+                print(surface)
 
 
 world = World()
