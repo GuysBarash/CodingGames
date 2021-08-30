@@ -91,6 +91,43 @@ class SimpleAgent:
         return action
 
 
+class GreedyAgent:
+    # Strategy
+    # always send forces to the nearest factory
+    def __init__(self, world, current_player=+1):
+        self.current_player = current_player
+        self.opponent_player = -1 * self.current_player
+
+    def observe(self, world):
+
+        if world.facdf['owner'].unique().shape[0] <= 1:
+            return 'WAIT'
+
+        # Choose target
+        commands_to_generate = min(2, world.facdf[world.facdf['owner'] == self.current_player]['owner'].count())
+        factories_used = list()
+        commands = list()
+        for cmd_idx in range(commands_to_generate):
+            section_choose_factory = True
+            if section_choose_factory:
+                optionsfac = world.facdf[world.facdf['owner'] == self.current_player]
+                optionsfac = optionsfac[optionsfac['cyborgs'] > 0]
+
+        # Send forces
+        forces_at_base = int(world.facdf.loc[selected_attacker, 'cyborgs'])
+        distance = int(world.proxdf.loc[selected_attacker, selected_target])
+        forces_at_targt = int(world.facdf.loc[selected_target, 'cyborgs'] + (
+                distance * world.facdf.loc[selected_target, 'production']))
+
+        forces_to_send = int(max(int(forces_at_base * 0.75), forces_at_targt))
+
+        # action
+        dprint(
+            f"ATTACKING! From [{selected_attacker}][UNITS {forces_at_base}] --> {distance} --> [{selected_target}][UNITS {forces_at_targt}]")
+        action = f'MOVE {selected_attacker} {selected_target} {forces_to_send}'
+        return action
+
+
 def dprint(s=''):
     print(s, file=sys.stderr)
 
@@ -360,64 +397,111 @@ class World:
 d = None
 if LOCAL_MODE:
     d = dict()
-    d["turn"] = 40
-    d["factory_count"] = 9
-    d["troops_count"] = 2
-    d["entity_count"] = 11
-    d["link_count"] = 36
+    d["turn"] = 12
+    d["factory_count"] = 13
+    d["troops_count"] = 3
+    d["entity_count"] = 16
+    d["link_count"] = 78
     d["edges"] = [
-        (0, 0, 1, 2),
-        (1, 0, 2, 2),
-        (2, 0, 3, 4),
-        (3, 0, 4, 4),
-        (4, 0, 5, 6),
-        (5, 0, 6, 6),
-        (6, 0, 7, 7),
-        (7, 0, 8, 7),
-        (8, 1, 2, 5),
-        (9, 1, 3, 3),
-        (10, 1, 4, 6),
-        (11, 1, 5, 6),
-        (12, 1, 6, 7),
-        (13, 1, 7, 6),
-        (14, 1, 8, 9),
-        (15, 2, 3, 6),
-        (16, 2, 4, 3),
-        (17, 2, 5, 7),
-        (18, 2, 6, 6),
-        (19, 2, 7, 9),
-        (20, 2, 8, 6),
-        (21, 3, 4, 9),
-        (22, 3, 5, 2),
-        (23, 3, 6, 11),
-        (24, 3, 7, 1),
-        (25, 3, 8, 12),
-        (26, 4, 5, 11),
-        (27, 4, 6, 2),
-        (28, 4, 7, 12),
-        (29, 4, 8, 1),
-        (30, 5, 6, 13),
-        (31, 5, 7, 1),
-        (32, 5, 8, 14),
-        (33, 6, 7, 14),
-        (34, 6, 8, 1),
-        (35, 7, 8, 15),
+        (0, 0, 1, 1),
+        (1, 0, 2, 1),
+        (2, 0, 3, 7),
+        (3, 0, 4, 7),
+        (4, 0, 5, 3),
+        (5, 0, 6, 3),
+        (6, 0, 7, 4),
+        (7, 0, 8, 4),
+        (8, 0, 9, 2),
+        (9, 0, 10, 2),
+        (10, 0, 11, 5),
+        (11, 0, 12, 5),
+        (12, 1, 2, 4),
+        (13, 1, 3, 4),
+        (14, 1, 4, 10),
+        (15, 1, 5, 1),
+        (16, 1, 6, 5),
+        (17, 1, 7, 2),
+        (18, 1, 8, 7),
+        (19, 1, 9, 1),
+        (20, 1, 10, 4),
+        (21, 1, 11, 3),
+        (22, 1, 12, 8),
+        (23, 2, 3, 10),
+        (24, 2, 4, 4),
+        (25, 2, 5, 5),
+        (26, 2, 6, 1),
+        (27, 2, 7, 7),
+        (28, 2, 8, 2),
+        (29, 2, 9, 4),
+        (30, 2, 10, 1),
+        (31, 2, 11, 8),
+        (32, 2, 12, 3),
+        (33, 3, 4, 15),
+        (34, 3, 5, 4),
+        (35, 3, 6, 10),
+        (36, 3, 7, 3),
+        (37, 3, 8, 12),
+        (38, 3, 9, 5),
+        (39, 3, 10, 9),
+        (40, 3, 11, 1),
+        (41, 3, 12, 14),
+        (42, 4, 5, 10),
+        (43, 4, 6, 4),
+        (44, 4, 7, 12),
+        (45, 4, 8, 3),
+        (46, 4, 9, 9),
+        (47, 4, 10, 5),
+        (48, 4, 11, 14),
+        (49, 4, 12, 1),
+        (50, 5, 6, 7),
+        (51, 5, 7, 4),
+        (52, 5, 8, 7),
+        (53, 5, 9, 4),
+        (54, 5, 10, 4),
+        (55, 5, 11, 4),
+        (56, 5, 12, 8),
+        (57, 6, 7, 7),
+        (58, 6, 8, 4),
+        (59, 6, 9, 4),
+        (60, 6, 10, 4),
+        (61, 6, 11, 8),
+        (62, 6, 12, 4),
+        (63, 7, 8, 10),
+        (64, 7, 9, 1),
+        (65, 7, 10, 8),
+        (66, 7, 11, 1),
+        (67, 7, 12, 11),
+        (68, 8, 9, 8),
+        (69, 8, 10, 1),
+        (70, 8, 11, 11),
+        (71, 8, 12, 1),
+        (72, 9, 10, 6),
+        (73, 9, 11, 3),
+        (74, 9, 12, 8),
+        (75, 10, 11, 8),
+        (76, 10, 12, 3),
+        (77, 11, 12, 12),
     ]
     d["details"] = [
-        [0, 'FACTORY', 1, 2, 0, 0, 0],
-        [1, 'FACTORY', 1, 21, 1, 0, 0],
-        [2, 'FACTORY', 1, 32, 1, 0, 0],
-        [3, 'FACTORY', 1, 27, 3, 0, 0],
-        [4, 'FACTORY', 1, 5, 3, 0, 0],
-        [5, 'FACTORY', 1, 40, 3, 0, 0],
-        [6, 'FACTORY', 1, 36, 3, 0, 0],
-        [7, 'FACTORY', 1, 4, 0, 0, 0],
-        [8, 'FACTORY', 1, 9, 0, 0, 0],
-        [30, 'TROOP', -1, 2, 8, 2, 2],
-        [32, 'TROOP', 1, 4, 8, 5, 1],
+        [0, 'FACTORY', 1, 3, 0, 0, 0],
+        [1, 'FACTORY', 1, 10, 3, 0, 0],
+        [2, 'FACTORY', 1, 9, 3, 0, 0],
+        [3, 'FACTORY', -1, 22, 3, 0, 0],
+        [4, 'FACTORY', -1, 1, 3, 0, 0],
+        [5, 'FACTORY', 0, 5, 3, 0, 0],
+        [6, 'FACTORY', 1, 4, 3, 0, 0],
+        [7, 'FACTORY', 0, 7, 3, 0, 0],
+        [8, 'FACTORY', 0, 7, 3, 0, 0],
+        [9, 'FACTORY', 1, 11, 2, 0, 0],
+        [10, 'FACTORY', -1, 0, 2, 0, 0],
+        [11, 'FACTORY', -1, 15, 2, 0, 0],
+        [12, 'FACTORY', 0, 2, 2, 0, 0],
+        [23, 'TROOP', -1, 1, 4, 1, 1],
+        [26, 'TROOP', -1, 1, 4, 1, 2],
+        [37, 'TROOP', 1, 6, 10, 15, 4],
     ]
 world = World(d)
-agent = SimpleAgent(world)
+agent = GreedyAgent(world)
 
 if LOCAL_MODE:
     world.update(d)
