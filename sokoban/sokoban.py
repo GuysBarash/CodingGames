@@ -329,15 +329,26 @@ if __name__ == '__main__':
             # Convert to PIL image and show
             all_imgs.append(img_colors_code)
 
-            # print(img)
-            # print("<-------->")
-            # if action == 'X':
-            #     break
-            # n_state = n_state.apply_action(action)
+            print(img)
+            print("<-------->")
+            if action == 'X':
+                break
+            n_state = n_state.apply_action(action)
 
-            import imageio
+        import imageio
 
-            # Make gif from images according to image shape
-            imageio.mimsave('sokoban.gif', all_imgs, duration=0.5,
-                            subrectangles=True)  # subrectangles=True is important to avoid black borders
-            print("GIF saved to disk.")
+        # Make gif from images according to image shape
+        imageio.mimsave('sokoban.gif', all_imgs, duration=0.5,
+                        subrectangles=True)  # subrectangles=True is important to avoid black borders
+        print("GIF saved to disk.")
+
+        # Create video from images with fps=4 and keep original colors
+        import cv2
+
+        height, width, layers = all_imgs[0].shape
+        size = (width, height)
+        out = cv2.VideoWriter('sokoban.avi', cv2.VideoWriter_fourcc(*'DIVX'), 4, size)
+        for i in range(len(all_imgs)):
+            out.write(all_imgs[i])
+        out.release()
+        print("MP4 saved to disk.")
