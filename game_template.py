@@ -19,7 +19,7 @@ LOCAL_MODE = socket.gethostname() == 'Barash-pc'
 
 
 def dprint(s=''):
-    print(s, file=sys.stderr)
+    print(s, file=sys.stderr,flush=True)
 
 
 def print_dict(d):
